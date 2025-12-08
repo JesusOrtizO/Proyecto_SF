@@ -1,0 +1,14 @@
+# Entorno virtual
+venv/
+
+# Cachés de Python
+__pycache__/
+
+# Datos grandes
+MarketData/
+*.csv
+*.xlsx
+
+# Otros
+.vscode/
+*.log
