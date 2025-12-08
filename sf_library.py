@@ -46,30 +46,61 @@ def descargar_tickers(tickers, carpeta='MarketData', start='2000-01-01', end=Non
 
 def daily_return(ticker, data_dir="MarketData"):
     """
-    Carga una serie temporal desde un archivo CSV y calcula los rendimientos diarios.
+    Carga una serie temporal para un ticker y calcula los rendimientos diarios.
+
+    Comportamiento:
+    - Si existe el archivo CSV local en data_dir, lo lee.
+    - Si NO existe, intenta descargar los datos desde yfinance,
+      construye el DataFrame y opcionalmente guarda el CSV para usos futuros.
 
     Parámetros
     ----------
     ticker : str
         Símbolo del activo (por ejemplo: 'AAPL').
     data_dir : str, opcional
-        Directorio donde se encuentran los archivos CSV. Por defecto 'MarketData'.
+        Directorio donde se encuentran (o se guardarán) los archivos CSV.
+        Por defecto 'MarketData'.
 
     Retorna
     -------
     pd.DataFrame
         DataFrame con columnas: ['date', 'close', 'return']
     """
+    # Construir ruta del archivo local
+    folder_path = os.path.join(os.getcwd(), data_dir)
+    file_path = os.path.join(folder_path, f"{ticker}.csv")
 
-    # Ruta del archivo
-    file_path = os.path.join(os.getcwd(), data_dir, f"{ticker}.csv")
+    # Si el archivo NO existe, intentamos descargarlo con yfinance
+    if not os.path.exists(file_path):
+        # Asegurar que la carpeta exista
+        os.makedirs(folder_path, exist_ok=True)
 
-    # Leer las columnas necesarias
-    df = pd.read_csv(
-        file_path,
-        usecols=["Date", "Close"],
-        parse_dates=["Date"]
-    )
+        try:
+            # Descarga amplia; luego app filtra por fechas
+            end_date = datetime.today().strftime("%Y-%m-%d")
+            data = yf.download(ticker, start="2000-01-01", end=end_date, progress=False)
+        except Exception as e:
+            raise FileNotFoundError(
+                f"No se pudo descargar datos para {ticker} desde yfinance: {e}"
+            )
+
+        if data.empty:
+            raise FileNotFoundError(
+                f"yfinance no devolvió datos para el ticker {ticker}. "
+                "Verifica que el símbolo sea correcto."
+            )
+
+        # Dejar solo las columnas necesarias y guardar CSV (opcional pero útil)
+        df_raw = data.reset_index()[["Date", "Close"]]
+        df_raw.to_csv(file_path, index=False)
+        df = df_raw
+    else:
+        # Leer las columnas necesarias del CSV existente
+        df = pd.read_csv(
+            file_path,
+            usecols=["Date", "Close"],
+            parse_dates=["Date"],
+        )
 
     # Limpiar y preparar
     df = (
@@ -90,6 +121,7 @@ def daily_return(ticker, data_dir="MarketData"):
     df = df.dropna(subset=["return"]).reset_index(drop=True)
 
     return df
+
 
 
 
