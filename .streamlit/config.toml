@@ -1,0 +1,7 @@
+[theme]
+base = "light"
+primaryColor = "#149A66"              # Verde corporativo
+backgroundColor = "#F4F6F5"           # Gris claro elegante
+secondaryBackgroundColor = "#FFFFFF"  # Tarjetas
+textColor = "#1C1C1C"
+font = "serif"

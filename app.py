@@ -31,7 +31,7 @@ from optimization import (
 )
 
 # ============================================================
-# Definición de universos de inversión y benchmark de referencia
+# Universos de inversión y benchmark de referencia
 # ============================================================
 
 UNIVERSE_REGIONS = {
@@ -62,7 +62,7 @@ UNIVERSES: Dict[str, Dict] = {
 }
 
 # Pesos del benchmark por universo (según enunciado del proyecto)
-# Valores expresados en proporciones (no en %), pero se vuelven a normalizar por seguridad.
+# Valores en proporciones (no en %). Se renormalizan por seguridad.
 BENCHMARK_WEIGHTS: Dict[str, Dict[str, float]] = {
     "Regiones": {
         "SPLG": 0.7062,
@@ -86,11 +86,11 @@ BENCHMARK_WEIGHTS: Dict[str, Dict[str, float]] = {
     },
 }
 
-# Etiquetas amigables para las métricas
+# Etiquetas amigables para métricas
 METRIC_LABELS = {
     "mean_annual": "Rendimiento anual esperado",
     "vol_annual": "Volatilidad anual",
-    "skew": "Asimetría (skewness)",
+    "skew": "Asimetría",
     "kurtosis": "Curtosis",
     "max_drawdown": "Máximo drawdown",
     "sharpe": "Ratio de Sharpe",
@@ -103,6 +103,10 @@ METRIC_LABELS = {
     "information_ratio": "Information Ratio",
 }
 
+# ============================================================
+# Funciones auxiliares
+# ============================================================
+
 
 @st.cache_data
 def load_synced_returns(
@@ -113,10 +117,7 @@ def load_synced_returns(
 ) -> pd.DataFrame:
     """
     Descarga datos (si es necesario), sincroniza series y devuelve
-    un DataFrame con retornos diarios en el rango de fechas indicado.
-
-    La función está cacheada para evitar descargas y cálculos repetidos.
-    El cache se invalida cuando cambian los argumentos.
+    un DataFrame con rendimientos diarios en el rango de fechas indicado.
     """
     sfl.descargar_tickers(
         tickers=tickers,
@@ -156,8 +157,8 @@ def compute_benchmark(
 ) -> Tuple[pd.Series, np.ndarray]:
     """
     Construye la serie de rendimientos del benchmark a partir de los pesos
-    definidos para cada universo. Devuelve:
-
+    definidos para cada universo.
+    Devuelve:
     - benchmark_returns: Serie de rendimientos diarios del benchmark.
     - weights_vec: vector de pesos alineado con las columnas de returns_matrix.
     """
@@ -173,10 +174,16 @@ def compute_benchmark(
     if total <= 0:
         return None, None
 
-    weights_vec = weights_vec / total  # normalizar por seguridad
+    # Normalización de seguridad
+    weights_vec = weights_vec / total
     benchmark_returns = returns_matrix @ weights_vec
 
     return benchmark_returns, weights_vec
+
+
+def format_pct(x: float) -> str:
+    """Formatea un número en formato porcentaje con dos decimales."""
+    return f"{100 * x:,.2f}%"
 
 
 # ============================
@@ -188,7 +195,7 @@ st.set_page_config(
     layout="wide",
 )
 
-# CSS ligero para pulir estilo
+# CSS ligero para pulir estilo (manteniendo el tema oscuro actual)
 st.markdown(
     """
     <style>
@@ -216,18 +223,17 @@ st.markdown(
 
 st.title("Seminario de Finanzas – Análisis de ETF y Portafolios")
 st.markdown(
-    "Aplicación interactiva para análisis de **ETF**, construcción de portafolios "
-    "arbitrarios y portafolios optimizados bajo el enfoque de Markowitz. "
-    "Incluye comparación contra un portafolio de referencia (benchmark) definido "
-    "en el enunciado del proyecto."
+    "Herramienta interactiva para analizar **ETF**, construir portafolios "
+    "arbitrarios y obtener portafolios óptimos bajo el enfoque de Markowitz. "
+    "Incluye comparación contra un portafolio de referencia (*benchmark*)."
 )
 st.markdown("---")
 
 # ======================
-# Configuración lateral
+# Panel lateral
 # ======================
 
-st.sidebar.header("Configuración de datos")
+st.sidebar.header("Parámetros del análisis")
 
 universe_key = st.sidebar.selectbox(
     "Universo de inversión",
@@ -239,34 +245,34 @@ universe = UNIVERSES[universe_key]
 tickers = universe["tickers"]
 
 st.sidebar.markdown(f"**Universo seleccionado:** {universe['nombre']}")
-st.sidebar.write("Tickers:")
+st.sidebar.caption("ETF incluidos:")
 st.sidebar.write(", ".join(tickers))
 
 default_start = dt.date(2015, 1, 1)
 default_end = dt.date.today()
 
 start_date = st.sidebar.date_input(
-    "Fecha inicio",
+    "Fecha inicial",
     value=default_start,
     help="Formato AAAA-MM-DD",
 )
 end_date = st.sidebar.date_input(
-    "Fecha fin",
+    "Fecha final",
     value=default_end,
     help="Formato AAAA-MM-DD",
 )
 
 if start_date > end_date:
-    st.sidebar.error("La fecha de inicio debe ser anterior o igual a la fecha de fin.")
+    st.sidebar.error("La fecha inicial debe ser anterior o igual a la fecha final.")
 
 rf_annual = st.sidebar.number_input(
-    "Tasa libre de riesgo anual",
+    "Tasa libre de riesgo (anual)",
     min_value=0.0,
     max_value=0.20,
     value=0.04,
     step=0.005,
     format="%.3f",
-    help="Ejemplo: 0.040 corresponde a una tasa anual de 4%.",
+    help="Ejemplo: 0.040 corresponde a 4% anual.",
 )
 
 # ======================
@@ -297,7 +303,7 @@ if start_date <= end_date:
     price_index_assets = build_price_index(returns_matrix, base=100.0)
     price_index_assets["date"] = dates
 
-    # Variables que se usarán en varias pestañas
+    # Variables compartidas entre pestañas
     portfolio_index = None          # índice del portafolio arbitrario
     metrics_portfolio = None        # métricas del portafolio arbitrario
     portfolio_returns = None        # serie de rendimientos del portafolio arbitrario
@@ -307,29 +313,29 @@ if start_date <= end_date:
     # ======================
 
     tab_datos, tab_portafolio, tab_benchmark, tab_opt = st.tabs(
-        [
-            "Datos de mercado",
-            "Portafolio arbitrario",
-            "Comparación con Benchmark",
-            "Portafolios optimizados",
-        ]
+        ["Datos", "Portafolio arbitrario", "Benchmark", "Portafolios óptimos"]
     )
 
     # -------------------------------------------------
-    # Tab 1: Datos de mercado
+    # Pestaña 1: Datos de mercado
     # -------------------------------------------------
     with tab_datos:
-        st.subheader("1. Retornos diarios sincronizados")
-        st.caption(
-            "Los rendimientos se calculan con datos diarios sincronizados para "
-            "todos los ETF del universo seleccionado."
-        )
-        st.write(
-            f"Número de observaciones en el rango seleccionado: {len(df_returns)}"
-        )
+        st.subheader("Datos de mercado del universo seleccionado")
+
+        # KPI del periodo
+        col_a, col_b, col_c = st.columns(3)
+        with col_a:
+            st.metric("Número de observaciones", f"{len(df_returns):,}")
+        with col_b:
+            horizonte = (dates.iloc[-1] - dates.iloc[0]).days / 365
+            st.metric("Horizonte aproximado", f"{horizonte:,.1f} años")
+        with col_c:
+            st.metric("Número de ETF en el universo", f"{len(tickers)}")
+
+        st.markdown("### Primeros rendimientos diarios")
         st.dataframe(df_returns.head())
 
-        st.subheader("2. Índices de valor normalizados (base 100)")
+        st.markdown("### Índices de valor normalizados (base 100)")
         df_plot = price_index_assets.melt(
             id_vars="date", var_name="Ticker", value_name="Índice"
         )
@@ -338,7 +344,7 @@ if start_date <= end_date:
             x="date",
             y="Índice",
             color="Ticker",
-            title=f"Índices de valor normalizados – {universe['nombre']}",
+            title=f"Índices normalizados – {universe['nombre']}",
         )
         fig.update_layout(
             xaxis_title="Fecha",
@@ -347,13 +353,13 @@ if start_date <= end_date:
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    # ---------------------------
-    # Tab 2: Portafolio arbitrario
-    # ---------------------------
+    # -------------------------------------------------
+    # Pestaña 2: Portafolio arbitrario
+    # -------------------------------------------------
     with tab_portafolio:
-        st.subheader("1. Configuración de pesos del portafolio")
+        st.subheader("Configuración del portafolio arbitrario")
         st.markdown(
-            "Defina pesos relativos (positivos o negativos) para cada ETF. "
+            "Ajusta los pesos relativos (pueden ser positivos o negativos) para cada ETF. "
             "Los pesos se normalizan de forma automática para que la suma sea igual a 1."
         )
 
@@ -377,30 +383,60 @@ if start_date <= end_date:
 
         if weight_sum == 0.0:
             st.warning(
-                "La suma de los pesos es cero. Ajuste los sliders para obtener un portafolio válido."
+                "La suma de los pesos es cero. Ajusta los controles para obtener un portafolio válido."
             )
         else:
             weights = raw_weights_array / weight_sum
 
-            st.markdown("#### Pesos normalizados del portafolio")
+            st.markdown("### Pesos normalizados")
             df_weights = pd.DataFrame({"Ticker": tickers, "Peso": weights})
             st.dataframe(df_weights.style.format({"Peso": "{:.4f}"}))
 
             # Rendimientos y valor del portafolio
             portfolio_returns = returns_matrix @ weights
             portfolio_index = build_price_index(
-                portfolio_returns.to_frame("Portfolio"),
+                portfolio_returns.to_frame("Portafolio"),
                 base=100.0,
             )
             portfolio_index["date"] = dates
 
-            st.subheader("2. Desempeño del portafolio")
+            # Métricas del portafolio
+            metrics_portfolio = compute_portfolio_metrics(
+                portfolio_returns=portfolio_returns,
+                rf_annual=rf_annual,
+                benchmark_returns=benchmark_returns,
+            )
 
+            # KPI cards para el portafolio arbitrario
+            st.markdown("### Indicadores clave del portafolio")
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric(
+                    "Rendimiento anual esperado",
+                    format_pct(metrics_portfolio.get("mean_annual", np.nan)),
+                )
+            with col2:
+                st.metric(
+                    "Volatilidad anual",
+                    format_pct(metrics_portfolio.get("vol_annual", np.nan)),
+                )
+            with col3:
+                st.metric(
+                    "Ratio de Sharpe",
+                    f"{metrics_portfolio.get('sharpe', np.nan):.2f}",
+                )
+            with col4:
+                st.metric(
+                    "Máximo drawdown",
+                    format_pct(metrics_portfolio.get("max_drawdown", np.nan)),
+                )
+
+            st.markdown("### Evolución del valor del portafolio")
             fig_port = px.line(
                 portfolio_index,
                 x="date",
-                y="Portfolio",
-                title="Índice de valor del portafolio arbitrario (base 100)",
+                y="Portafolio",
+                title="Índice de valor del portafolio (base 100)",
             )
             fig_port.update_layout(
                 xaxis_title="Fecha",
@@ -408,15 +444,8 @@ if start_date <= end_date:
             )
             st.plotly_chart(fig_port, use_container_width=True)
 
-            # Cálculo de métricas
-            st.subheader("3. Métricas del portafolio")
-
-            metrics_portfolio = compute_portfolio_metrics(
-                portfolio_returns=portfolio_returns,
-                rf_annual=rf_annual,
-                benchmark_returns=benchmark_returns,
-            )
-
+            # Tabla detallada de métricas
+            st.markdown("### Métricas detalladas")
             rows = []
             for key, value in metrics_portfolio.items():
                 nombre = METRIC_LABELS.get(key, key)
@@ -426,23 +455,23 @@ if start_date <= end_date:
             st.dataframe(df_metrics.style.format({"Valor": "{:.6f}"}))
 
     # -------------------------------------------------------
-    # Tab 3: Comparación contra Benchmark
+    # Pestaña 3: Comparación contra benchmark
     # -------------------------------------------------------
     with tab_benchmark:
-        st.subheader("1. Portafolio benchmark del universo")
+        st.subheader("Portafolio de referencia (benchmark)")
 
         if benchmark_returns is None or benchmark_weights_vec is None:
             st.warning(
-                "No se ha podido construir el benchmark para el universo seleccionado. "
-                "Revise la definición de BENCHMARK_WEIGHTS."
+                "No se pudo construir el benchmark para el universo seleccionado. "
+                "Revisa la definición de BENCHMARK_WEIGHTS."
             )
         elif portfolio_index is None or metrics_portfolio is None:
             st.info(
-                "Primero define un portafolio arbitrario (pestaña *Portafolio arbitrario*) "
-                "para poder compararlo contra el benchmark."
+                "Primero configura un portafolio arbitrario en la pestaña "
+                "**Portafolio arbitrario** para poder compararlo contra el benchmark."
             )
         else:
-            # Tabla de pesos del benchmark alineados con los tickers del universo
+            st.markdown("### Pesos del benchmark")
             df_bench_w = pd.DataFrame(
                 {
                     "Ticker": returns_matrix.columns,
@@ -451,15 +480,14 @@ if start_date <= end_date:
             )
             st.dataframe(df_bench_w.style.format({"Peso benchmark": "{:.4f}"}))
 
-            # Construcción del índice de valor del benchmark
+            # Índice de valor del benchmark
             benchmark_index = build_price_index(
                 benchmark_returns.to_frame("Benchmark"),
                 base=100.0,
             )
             benchmark_index["date"] = dates
 
-            st.subheader("2. Comparación de índices normalizados")
-
+            st.markdown("### Evolución comparada (base 100)")
             df_comp = pd.merge(
                 portfolio_index,
                 benchmark_index,
@@ -470,8 +498,8 @@ if start_date <= end_date:
             fig_comp = px.line(
                 df_comp,
                 x="date",
-                y=["Portfolio", "Benchmark"],
-                title="Comparación portafolio arbitrario vs benchmark (base 100)",
+                y=["Portafolio", "Benchmark"],
+                title="Portafolio arbitrario vs benchmark (índice base 100)",
             )
             fig_comp.update_layout(
                 xaxis_title="Fecha",
@@ -480,8 +508,7 @@ if start_date <= end_date:
             )
             st.plotly_chart(fig_comp, use_container_width=True)
 
-            st.subheader("3. Comparación de métricas")
-
+            st.markdown("### Comparación de métricas")
             benchmark_metrics = compute_portfolio_metrics(
                 portfolio_returns=benchmark_returns,
                 rf_annual=rf_annual,
@@ -500,7 +527,6 @@ if start_date <= end_date:
                 )
 
             df_metrics_comp = pd.DataFrame(rows_comp)
-
             st.dataframe(
                 df_metrics_comp.style.format(
                     {"Portafolio": "{:.4f}", "Benchmark": "{:.4f}"}
@@ -508,20 +534,21 @@ if start_date <= end_date:
             )
 
     # -------------------------------------------------------
-    # Tab 4: Portafolios optimizados
+    # Pestaña 4: Portafolios optimizados
     # -------------------------------------------------------
     with tab_opt:
-        st.subheader("1. Selección de criterio de optimización")
+        st.subheader("Portafolios óptimos de Markowitz")
         st.caption(
-            "Los portafolios se construyen bajo el enfoque clásico de Markowitz, "
-            "a partir de rendimientos y matriz de varianza-covarianza anualizados."
+            "Los portafolios se construyen con media y matriz de varianza–covarianza "
+            "anualizadas de los ETF del universo seleccionado."
         )
 
         opt_choice = st.selectbox(
-            "Tipo de portafolio óptimo",
+            "Criterio de optimización",
             ["Mínima varianza", "Máximo Sharpe", "Retorno objetivo"],
         )
 
+        # Selección de pesos óptimos
         if opt_choice == "Retorno objetivo":
             min_ret = float(mu_annual.min())
             max_ret = float(mu_annual.max())
@@ -553,8 +580,7 @@ if start_date <= end_date:
                 cov_annual=cov_annual,
             )
 
-        st.subheader("2. Pesos del portafolio óptimo")
-
+        st.markdown("### Pesos del portafolio óptimo")
         df_opt_weights = pd.DataFrame({"Ticker": tickers, "Peso óptimo": opt_weights})
         st.dataframe(df_opt_weights.style.format({"Peso óptimo": "{:.4f}"}))
 
@@ -568,13 +594,43 @@ if start_date <= end_date:
         )
         opt_index["date"] = dates
 
-        st.subheader("3. Desempeño del portafolio optimizado")
+        # Métricas del portafolio optimizado
+        opt_metrics = compute_portfolio_metrics(
+            portfolio_returns=opt_returns,
+            rf_annual=rf_annual,
+            benchmark_returns=benchmark_returns,
+        )
 
+        # KPI cards del portafolio óptimo
+        st.markdown("### Indicadores clave del portafolio óptimo")
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.metric(
+                "Rendimiento anual esperado",
+                format_pct(opt_metrics.get("mean_annual", np.nan)),
+            )
+        with c2:
+            st.metric(
+                "Volatilidad anual",
+                format_pct(opt_metrics.get("vol_annual", np.nan)),
+            )
+        with c3:
+            st.metric(
+                "Ratio de Sharpe",
+                f"{opt_metrics.get('sharpe', np.nan):.2f}",
+            )
+        with c4:
+            st.metric(
+                "Máximo drawdown",
+                format_pct(opt_metrics.get("max_drawdown", np.nan)),
+            )
+
+        st.markdown("### Evolución del portafolio óptimo")
         fig_opt = px.line(
             opt_index,
             x="date",
             y="Óptimo",
-            title=f"Índice de valor del portafolio óptimo – {opt_choice} – {universe['nombre']}",
+            title=f"Índice de valor del portafolio óptimo – {opt_choice}",
         )
         fig_opt.update_layout(
             xaxis_title="Fecha",
@@ -582,20 +638,11 @@ if start_date <= end_date:
         )
         st.plotly_chart(fig_opt, use_container_width=True)
 
-        # Métricas del portafolio optimizado
-        st.subheader("4. Métricas del portafolio optimizado")
-
-        opt_metrics = compute_portfolio_metrics(
-            portfolio_returns=opt_returns,
-            rf_annual=rf_annual,
-            benchmark_returns=benchmark_returns,
-        )
-
+        st.markdown("### Métricas detalladas del portafolio óptimo")
         rows_opt = []
         for key, value in opt_metrics.items():
             nombre = METRIC_LABELS.get(key, key)
             rows_opt.append({"Métrica": nombre, "Valor": value})
 
         df_opt_metrics = pd.DataFrame(rows_opt)
-
         st.dataframe(df_opt_metrics.style.format({"Valor": "{:.6f}"}))
