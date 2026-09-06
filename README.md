@@ -6,8 +6,7 @@ Aplicación interactiva en **Streamlit** para analizar ETFs, construir portafoli
 
 Proyecto desarrollado para la materia **Seminario de Finanzas**, Facultad de Ciencias, UNAM.
 
-**Integrantes:** Ortiz Ordoñez Jesús Alberto · Terres Rodríguez Diana Laura · Alonso Bartolo Karla Rubí · Carbajal Sánchez Miguel
-
+**Integrantes:** Ortiz Ordoñez Jesús Alberto
 ---
 
 ## 1. Qué hace la app
