@@ -34,6 +34,12 @@ def descargar_tickers(tickers, carpeta='MarketData', start='2000-01-01', end=Non
             # Dejar solo las columnas necesarias
             df = data.reset_index()[['Date', 'Close']]
 
+            # Validar que 'Close' no venga vacío/corrupto (p.ej. respuesta parcial
+            # de Yahoo por rate-limiting): si TODO es NaN, no lo tratamos como éxito.
+            if df['Close'].isna().all():
+                print(f"⚠️ Datos de {tic} llegaron corruptos (Close vacío), se omite.")
+                continue
+
             # Guardar archivo CSV
             ruta = os.path.join(carpeta, f"{tic}.csv")
             df.to_csv(ruta, index=False)
@@ -92,6 +98,14 @@ def daily_return(ticker, data_dir="MarketData"):
 
         # Dejar solo las columnas necesarias y guardar CSV (opcional pero útil)
         df_raw = data.reset_index()[["Date", "Close"]]
+
+        # Misma validación que en descargar_tickers: rechazar respuestas
+        # "vacías por dentro" (Close todo NaN) aunque tengan filas.
+        if df_raw["Close"].isna().all():
+            raise FileNotFoundError(
+                f"yfinance devolvió datos corruptos (Close vacío) para {ticker}. "
+                "Probablemente un límite temporal de peticiones (rate limit); intenta de nuevo."
+            )
         df_raw.to_csv(file_path, index=False)
         df = df_raw
     else:

@@ -253,6 +253,20 @@ if start_date <= end_date:
         data_dir="MarketData",
     )
 
+    if df_returns.empty:
+        st.error(
+            "No se pudieron sincronizar datos para este universo en el rango de fechas "
+            "seleccionado. Esto suele deberse a un límite temporal de peticiones de Yahoo "
+            "Finance (rate limit). Prueba lo siguiente:\n\n"
+            "1. Espera un minuto y presiona **R** para recargar la app.\n"
+            "2. Si el problema persiste, ve a *Manage app* → **Reboot app** para limpiar "
+            "la caché de datos y forzar una descarga fresca."
+        )
+        if st.button("🔄 Reintentar descarga (limpiar caché)"):
+            load_synced_returns.clear()
+            st.rerun()
+        st.stop()
+
     dates = df_returns["date"]
     returns_matrix = df_returns.drop(columns="date")
 
