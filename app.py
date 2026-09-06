@@ -257,7 +257,8 @@ if start_date <= end_date:
         st.error(
             "No se pudieron sincronizar datos para este universo en el rango de fechas "
             "seleccionado. Esto suele deberse a un límite temporal de peticiones de Yahoo "
-            "Finance (rate limit). Prueba lo siguiente:\n\n"
+            "Finance (rate limit) o a que Yahoo no tiene datos para alguno de estos ETF en "
+            "este momento. Prueba lo siguiente:\n\n"
             "1. Espera un minuto y presiona **R** para recargar la app.\n"
             "2. Si el problema persiste, ve a *Manage app* → **Reboot app** para limpiar "
             "la caché de datos y forzar una descarga fresca."
@@ -266,6 +267,19 @@ if start_date <= end_date:
             load_synced_returns.clear()
             st.rerun()
         st.stop()
+
+    # Si Yahoo no tuvo datos para alguno de los ETF solicitados, seguimos con los
+    # demás en vez de tirar todo el análisis (ver columnas realmente disponibles).
+    tickers_disponibles = [t for t in tickers if t in df_returns.columns]
+    tickers_faltantes = [t for t in tickers if t not in df_returns.columns]
+
+    if tickers_faltantes:
+        st.warning(
+            f"⚠️ No se pudieron cargar datos para: **{', '.join(tickers_faltantes)}** "
+            "(posiblemente un problema temporal de Yahoo Finance con esos símbolos). "
+            f"Continuando el análisis con los {len(tickers_disponibles)} ETF restantes."
+        )
+    tickers = tickers_disponibles
 
     dates = df_returns["date"]
     returns_matrix = df_returns.drop(columns="date")

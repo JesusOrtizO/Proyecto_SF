@@ -1,5 +1,6 @@
 import yfinance as yf
 import pandas as pd
+import numpy as np
 import os
 from datetime import datetime
 
@@ -218,19 +219,31 @@ def sync_timeseries(tickers, data_dir="MarketData"):
     -------
     df : pd.DataFrame
         DataFrame con las fechas y los retornos sincronizados de cada ticker.
+        Si algún ticker falla (p.ej. Yahoo Finance no tiene datos para él en
+        ese momento), se omite en vez de vaciar todo el resultado; sus columnas
+        simplemente no aparecerán en el DataFrame devuelto.
     mtx_var_covar : np.ndarray
-        Matriz de varianza-covarianza.
+        Matriz de varianza-covarianza (solo de los tickers que sí se pudieron cargar).
     mtx_correl : np.ndarray
-        Matriz de correlaciones.
+        Matriz de correlaciones (solo de los tickers que sí se pudieron cargar).
     """
 
-    # Cargar y preparar todas las series de retornos
+    # Cargar y preparar todas las series de retornos, tolerando fallas individuales
     all_returns = []
 
     for ticker in tickers:
-        t = daily_return(ticker, data_dir=data_dir)
+        try:
+            t = daily_return(ticker, data_dir=data_dir)
+        except Exception as e:
+            print(f"⚠️ Se omite {ticker} de la sincronización (no se pudo cargar): {e}")
+            continue
         t = t[['date', 'return']].rename(columns={'return': ticker})
         all_returns.append(t)
+
+    if not all_returns:
+        # Ningún ticker pudo cargarse: devolvemos estructuras vacías pero válidas
+        empty_df = pd.DataFrame(columns=['date'] + list(tickers))
+        return empty_df, np.empty((0, 0)), np.empty((0, 0))
 
     # Unir todas las series por la columna 'date' (intersección automática)
     df = all_returns[0]
