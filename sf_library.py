@@ -3,6 +3,23 @@ import pandas as pd
 import os
 from datetime import datetime
 
+
+def _flatten_yf_columns(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Normaliza el resultado de yf.download().
+
+    Algunas versiones de yfinance devuelven columnas en MultiIndex
+    (nivel 'Price' + nivel 'Ticker') incluso al descargar un solo ticker.
+    Esto aplana esas columnas para que 'Close' siempre sea una Serie simple,
+    sin importar la versión de yfinance instalada.
+    """
+    if isinstance(data.columns, pd.MultiIndex):
+        # Nos quedamos con el primer nivel: 'Close', 'Open', 'Volume', etc.
+        data = data.copy()
+        data.columns = data.columns.get_level_values(0)
+    return data
+
+
 def descargar_tickers(tickers, carpeta='MarketData', start='2000-01-01', end=None):
     """
     Descarga datos históricos de una lista de tickers usando yfinance
@@ -30,6 +47,8 @@ def descargar_tickers(tickers, carpeta='MarketData', start='2000-01-01', end=Non
             if data.empty:
                 print(f"⚠️ No se encontraron datos para {tic}, se omite.")
                 continue
+
+            data = _flatten_yf_columns(data)
 
             # Dejar solo las columnas necesarias
             df = data.reset_index()[['Date', 'Close']]
@@ -95,6 +114,8 @@ def daily_return(ticker, data_dir="MarketData"):
                 f"yfinance no devolvió datos para el ticker {ticker}. "
                 "Verifica que el símbolo sea correcto."
             )
+
+        data = _flatten_yf_columns(data)
 
         # Dejar solo las columnas necesarias y guardar CSV (opcional pero útil)
         df_raw = data.reset_index()[["Date", "Close"]]
